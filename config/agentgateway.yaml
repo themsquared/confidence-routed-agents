@@ -1,0 +1,71 @@
+# yaml-language-server: $schema=https://agentgateway.dev/schema/config
+#
+# agentgateway v1.5.0 standalone: the escalation path for confidence-routed agents.
+#
+# This gateway fronts ONLY the frontier-model escalation call. The cheap first
+# call (Jev, a typed-decision API, not a chat model) is not an LLM backend in
+# agentgateway's sense and is called directly by the router. What the gateway
+# gives the escalation path: a secretless router (the real Anthropic key lives
+# here, never in router.py or its environment), a hard per-key USD budget so a
+# confidence threshold set too low cannot run up an unbounded bill, and an
+# access log line per call for the unified audit trail.
+
+config:
+  adminAddr: 0.0.0.0:15000
+  database:
+    url: "sqlite://./data/agentgateway.db?mode=rwc"
+  storage:
+    mode: hybrid
+
+  modelCatalog:
+  - inline:
+      providers:
+        anthropic:
+          models:
+            claude-sonnet-5:
+              rates:
+                input: "2.00"
+                output: "10.00"
+
+gateways:
+  default:
+    port: 3300
+    listeners:
+    - name: llm
+      apiKey:
+        mode: strict
+        location:
+          header:
+            name: Authorization
+            prefix: "Bearer "
+        keys:
+        # The router's only credential. No Anthropic key anywhere in router.py.
+        - key: sk-router-escalation
+          metadata:
+            name: router
+            team: confidence-routed-agents
+          budgets:
+          - name: daily-usd
+            limit: { unit: USD, amount: 1.00 }
+            window: { rolling: 24h }
+            onBudgetExceeded: Block
+
+llm:
+  gateways: default/llm
+  providers:
+  - name: anthropic
+    provider: anthropic
+    defaults:
+      auth:
+        key:
+          value: "$ANTHROPIC_API_KEY"
+          location:
+            header:
+              name: x-api-key
+      requestHeaders:
+        add:
+          anthropic-version: "2023-06-01"
+  models:
+  - name: claude-sonnet-5
+    provider:
+      reference: anthropic

@@ -1,0 +1,12 @@
+services:
+  agentgateway:
+    image: cr.agentgateway.dev/agentgateway:v1.5.0
+    command: ["-f", "/config/agentgateway.yaml"]
+    ports:
+      - "3310:3300"
+      - "15010:15000"
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+    volumes:
+      - ./config:/config
+      - ./data:/data
